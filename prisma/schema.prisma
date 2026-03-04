@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TaskType {
+  feature
+  bug
+  refactor
+  chore
+  spike
+  design
+}
+
+enum TaskWeight {
+  XS
+  S
+  M
+  L
+  XL
+}
+
+enum TaskStatus {
+  unassigned
+  in_progress
+  in_review
+  blocked
+  done
+  cancelled
+}
+
+enum AvailabilityStatus {
+  available
+  in_progress
+  in_review
+  flow_state
+  away
+}
+
+enum MissionVisibility {
+  personal
+  team
+}
+
+model Workspace {
+  id         String       @id @default(cuid())
+  name       String
+  slug       String       @unique
+  members    TeamMember[]
+  tasks      Task[]
+  queries    Query[]
+  missions   Mission[]
+  stackOrder StackOrder?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+}
+
+model TeamMember {
+  id              String              @id @default(cuid())
+  name            String
+  email           String              @unique
+  avatarUrl       String?
+  // Custom expertise tags ordered by proficiency (index 0 = primary)
+  expertiseRoles  String[]            @default([])
+  // Precomputed OpenAI embedding of joined expertise tags
+  roleVector      Unsupported("vector(1536)")?
+  availability    AvailabilityStatus  @default(available)
+  flowStateEndsAt DateTime?
+  workspaceId     String
+  workspace       Workspace           @relation(fields: [workspaceId], references: [id])
+  assignedTasks   Task[]              @relation("AssignedTo")
+  raisedQueries   Query[]             @relation("RaisedBy")
+  taggedInQueries QueryTag[]
+  reactions       TaskReaction[]
+  missions        Mission[]           @relation("CreatedMissions")
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+}
+
+model Task {
+  id                 String        @id @default(cuid())
+  title              String
+  description        String?
+  type               TaskType
+  weight             TaskWeight?
+  status             TaskStatus    @default(unassigned)
+  assigneeId         String?
+  assignee           TeamMember?   @relation("AssignedTo", fields: [assigneeId], references: [id])
+  workspaceId        String
+  workspace          Workspace     @relation(fields: [workspaceId], references: [id])
+  links              String[]      @default([])
+  acceptanceCriteria String?
+  queries            Query[]
+  reactions          TaskReaction[]
+  blockedBy          TaskLink[]    @relation("BlockedTask")
+  blocks             TaskLink[]    @relation("BlockingTask")
+  activityLog        ActivityEntry[]
+  cancelledAt        DateTime?
+  cancelReason       String?
+  completedAt        DateTime?
+  // Precomputed OpenAI embedding of title + description + type
+  taskVector         Unsupported("vector(1536)")?
+  missionItems       MissionItem[]
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+}
+
+model TaskLink {
+  id             String   @id @default(cuid())
+  blockedTaskId  String
+  blockedTask    Task     @relation("BlockedTask", fields: [blockedTaskId], references: [id])
+  blockingTaskId String
+  blockingTask   Task     @relation("BlockingTask", fields: [blockingTaskId], references: [id])
+  createdAt      DateTime @default(now())
+}
+
+model Query {
+  id          String     @id @default(cuid())
+  text        String
+  blocking    Boolean    @default(false)
+  resolved    Boolean    @default(false)
+  resolvedAt  DateTime?
+  taskId      String
+  task        Task       @relation(fields: [taskId], references: [id])
+  raisedById  String
+  raisedBy    TeamMember @relation("RaisedBy", fields: [raisedById], references: [id])
+  taggedUsers QueryTag[]
+  workspaceId String
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id])
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model QueryTag {
+  id          String     @id @default(cuid())
+  queryId     String
+  query       Query      @relation(fields: [queryId], references: [id], onDelete: Cascade)
+  memberId    String
+  member      TeamMember @relation(fields: [memberId], references: [id])
+  responded   Boolean    @default(false)
+  respondedAt DateTime?
+}
+
+model StackOrder {
+  id          String    @id @default(cuid())
+  workspaceId String    @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  // rules JSON shape:
+  // { typeOrder: TaskType[], withinTypeOrder: { [type]: taskId[] }, pinnedTaskId?: string }
+  rules       Json
+  updatedAt   DateTime  @updatedAt
+}
+
+model ActivityEntry {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id])
+  actorName String
+  action    String
+  meta      Json?
+  createdAt DateTime @default(now())
+}
+
+model TaskReaction {
+  id        String     @id @default(cuid())
+  taskId    String
+  task      Task       @relation(fields: [taskId], references: [id])
+  memberId  String
+  member    TeamMember @relation(fields: [memberId], references: [id])
+  emoji     String
+  createdAt DateTime   @default(now())
+
+  @@unique([taskId, memberId, emoji])
+}
+
+model Mission {
+  id          String            @id @default(cuid())
+  title       String
+  description String?
+  visibility  MissionVisibility @default(personal)
+  deadline    DateTime
+  workspaceId String
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id])
+  creatorId   String
+  creator     TeamMember        @relation("CreatedMissions", fields: [creatorId], references: [id])
+  items       MissionItem[]
+  completedAt DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+model MissionItem {
+  id         String   @id @default(cuid())
+  missionId  String
+  mission    Mission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  // Exactly one of taskId OR targetText must be set
+  taskId     String?
+  task       Task?    @relation(fields: [taskId], references: [id])
+  targetText String?
+  done       Boolean  @default(false)
+  doneAt     DateTime?
+  position   Int
+  createdAt  DateTime @default(now())
+}
