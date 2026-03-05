@@ -10,14 +10,20 @@
     "db:start": "supabase start",
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
-    "db:studio": "supabase studio"
+    "db:studio": "supabase studio",
+    "db:seed": "npx prisma db seed"
+  },
+  "prisma": {
+    "seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.1",
+    "@prisma/adapter-pg": "^7.4.2",
     "@prisma/client": "^7.4.2",
     "@supabase/supabase-js": "^2.98.0",
     "@tanstack/react-query": "^5.90.21",
     "@tanstack/react-query-devtools": "^5.91.3",
+    "@types/pg": "^8.18.0",
     "canvas-confetti": "^1.9.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -27,6 +33,7 @@
     "next": "15.5.12",
     "next-auth": "^4.24.13",
     "openai": "^6.25.0",
+    "pg": "^8.20.0",
     "prisma": "^7.4.2",
     "radix-ui": "^1.4.3",
     "react": "19.1.0",
