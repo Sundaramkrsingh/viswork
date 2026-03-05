@@ -144,3 +144,8 @@ export interface TaskWithRank extends Task {
   signalScore: 1 | 2 | 3 | 4
   hasBlockingQuery: boolean
 }
+
+// TeamMember with their currently active task (if any)
+export interface TeamMemberWithTask extends TeamMember {
+  currentTask?: Pick<Task, 'id' | 'title' | 'type'> | null
+}
