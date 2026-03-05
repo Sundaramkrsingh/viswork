@@ -3,6 +3,7 @@
 import { useEffect, useCallback } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import confetti from 'canvas-confetti'
 import {
   X,
   ExternalLink,
@@ -11,6 +12,10 @@ import {
   Flame,
   Clock,
   Signal,
+  CheckCircle2,
+  ArrowRight,
+  ArrowLeft,
+  XCircle,
 } from 'lucide-react'
 import { cn, expertiseToColor, formatAge, formatDate } from '@/lib/utils'
 import { heatVariants } from '@/lib/heat'
@@ -97,6 +102,102 @@ function SignalBars({ score }: { score: 1 | 2 | 3 | 4 }) {
           style={{ height: `${level * 3 + 2}px` }}
         />
       ))}
+    </div>
+  )
+}
+
+function StatusActions({
+  taskId,
+  taskStatus,
+  onClose,
+}: {
+  taskId: string
+  taskStatus: string
+  onClose: () => void
+}) {
+  const queryClient = useQueryClient()
+
+  const mutation = useMutation({
+    mutationFn: (status: string) =>
+      fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      }).then((r) => {
+        if (!r.ok) throw new Error('Failed to update status')
+        return r.json()
+      }),
+    onSuccess: (_data, status) => {
+      queryClient.invalidateQueries({ queryKey: ['stack'] })
+      queryClient.invalidateQueries({ queryKey: ['task', taskId] })
+      if (status === 'done') {
+        confetti({
+          particleCount: 120,
+          spread: 80,
+          origin: { y: 0.6 },
+          colors: ['#34d399', '#6ee7b7', '#a7f3d0', '#fbbf24', '#60a5fa'],
+        })
+        onClose()
+      } else if (status === 'cancelled') {
+        onClose()
+      }
+    },
+  })
+
+  if (taskStatus !== 'in_progress' && taskStatus !== 'in_review') return null
+
+  return (
+    <div className="border-t border-border pt-4 mt-4">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+        Actions
+      </p>
+
+      <div className="flex flex-col gap-2">
+        {taskStatus === 'in_progress' && (
+          <button
+            disabled={mutation.isPending}
+            onClick={() => mutation.mutate('in_review')}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+            Send to Review
+          </button>
+        )}
+
+        {taskStatus === 'in_review' && (
+          <>
+            <button
+              disabled={mutation.isPending}
+              onClick={() => mutation.mutate('done')}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              Mark Done
+            </button>
+            <button
+              disabled={mutation.isPending}
+              onClick={() => mutation.mutate('in_progress')}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+              Back to In Progress
+            </button>
+          </>
+        )}
+
+        <button
+          disabled={mutation.isPending}
+          onClick={() => mutation.mutate('cancelled')}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-red-500/20 bg-transparent text-red-400/70 hover:text-red-400 hover:border-red-500/40 hover:bg-red-500/5 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <XCircle className="w-3.5 h-3.5 shrink-0" />
+          Cancel Task
+        </button>
+      </div>
+
+      {mutation.isError && (
+        <p className="text-xs text-red-400 mt-2">Failed to update status. Try again.</p>
+      )}
     </div>
   )
 }
@@ -424,6 +525,13 @@ export function TaskSlideOver({ taskId, onClose }: TaskSlideOverProps) {
                       </div>
                     </section>
                   )}
+
+                  {/* Status actions */}
+                  <StatusActions
+                    taskId={task.id}
+                    taskStatus={task.status}
+                    onClose={onClose}
+                  />
 
                   {/* Pick / Assign */}
                   <PickPanel

@@ -125,10 +125,19 @@ export async function assignTask(id: string, assigneeId: string): Promise<Task> 
 }
 
 export async function updateTaskStatus(id: string, status: Task['status']): Promise<Task> {
-  const updated = await prisma.task.update({
-    where: { id },
-    data: { status, updatedAt: new Date() },
-  })
+  const data: Record<string, unknown> = { status, updatedAt: new Date() }
+
+  if (status === 'done') {
+    data.completedAt = new Date()
+  } else if (status === 'cancelled') {
+    data.cancelledAt = new Date()
+  } else {
+    // Returning to active status — clear terminal timestamps
+    data.completedAt = null
+    data.cancelledAt = null
+  }
+
+  const updated = await prisma.task.update({ where: { id }, data })
   return toClientTask(updated)
 }
 

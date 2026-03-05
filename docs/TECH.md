@@ -10,9 +10,10 @@
 | Animation     | Framer Motion v11           | Best-in-class declarative animations for React   |
 | UI Primitives | shadcn/ui                   | Accessible base, fully ownable                   |
 | Database      | PostgreSQL                  | Relational, fits task/team/query model well      |
-| ORM           | Prisma                      | Type-safe queries, good migrations               |
+| ORM           | Prisma 7                    | Type-safe queries, good migrations               |
 | Realtime      | Supabase Realtime           | Postgres-backed, simple subscription API         |
-| Auth          | NextAuth.js v5              | Credentials + magic link, flexible               |
+| Auth          | NextAuth.js v4              | Email magic link, Prisma adapter                 |
+| Email         | Nodemailer (SMTP)           | Magic links + invite emails, zero vendor lock-in |
 | Client State  | Zustand                     | Minimal, for UI state (modal open, etc.)          |
 | Server State  | TanStack Query v5           | Cache + refetch, works with Server Actions        |
 | Confetti      | canvas-confetti             | Lightweight, fire-and-forget celebrations        |
@@ -125,6 +126,144 @@ viswork/
 └── stores/
     └── ui.ts                    ← Zustand store (modals, panels)
 ```
+
+---
+
+## Auth Architecture
+
+### Overview
+- **Provider:** NextAuth.js v4, Email provider (magic link) — no passwords
+- **Mailer:** Nodemailer over SMTP — used for magic links and invite emails
+- **Adapter:** `@auth/prisma-adapter` — stores Users, Sessions, Accounts, VerificationTokens in Postgres
+
+### Auth ↔ App Identity
+NextAuth manages the `User` model (just email + id for identity). Our `TeamMember` model is the app-layer entity. They are linked by `TeamMember.userId → User.id` (one-to-one, nullable until onboarding completes).
+
+```
+NextAuth User (auth identity)  ←─→  TeamMember (app entity: name, expertise, availability...)
+       user.id                           member.userId
+```
+
+### Onboarding Guard
+In `app/(app)/layout.tsx`: if session has no `memberId` → redirect to `/onboard/member`.
+In `app/(auth)/onboard/workspace/page.tsx`: if a Workspace already exists → redirect to `/onboard/member`.
+
+### Session Shape
+Extended via `types/next-auth.d.ts`:
+```typescript
+declare module 'next-auth' {
+  interface Session {
+    user: {
+      id: string
+      email: string
+      name?: string | null
+      memberId?: string       // TeamMember.id — undefined if not yet onboarded
+      workspaceId?: string    // Workspace.id
+    }
+  }
+}
+```
+
+### NextAuth Config (`lib/auth/config.ts`)
+```typescript
+import { NextAuthOptions } from 'next-auth'
+import EmailProvider from 'next-auth/providers/email'
+import { PrismaAdapter } from '@auth/prisma-adapter'
+import { prisma } from '@/lib/db/prisma'
+import { sendMagicLink } from '@/lib/email'
+
+export const authOptions: NextAuthOptions = {
+  adapter: PrismaAdapter(prisma) as any,
+  providers: [
+    EmailProvider({
+      server: '',         // unused — we override sendVerificationRequest
+      from: process.env.EMAIL_FROM!,
+      sendVerificationRequest: async ({ identifier: email, url }) => {
+        await sendMagicLink({ to: email, url })
+      },
+    }),
+  ],
+  pages: {
+    signIn: '/login',
+    verifyRequest: '/login?verify=1',
+    newUser: '/onboard/workspace', // only hit if User is brand new
+  },
+  session: { strategy: 'database' },
+  callbacks: {
+    async session({ session, user }) {
+      const member = await prisma.teamMember.findUnique({
+        where: { userId: user.id },
+        select: { id: true, workspaceId: true },
+      })
+      session.user.id = user.id
+      if (member) {
+        session.user.memberId = member.id
+        session.user.workspaceId = member.workspaceId
+      }
+      return session
+    },
+  },
+}
+```
+
+Route handler: `app/api/auth/[...nextauth]/route.ts`
+```typescript
+import NextAuth from 'next-auth'
+import { authOptions } from '@/lib/auth/config'
+const handler = NextAuth(authOptions)
+export { handler as GET, handler as POST }
+```
+
+### Nodemailer (`lib/email.ts`)
+```typescript
+import nodemailer from 'nodemailer'
+
+export const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT ?? 587),
+  secure: process.env.SMTP_SECURE === 'true',
+  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+})
+
+export async function sendMagicLink({ to, url }: { to: string; url: string }) {
+  await transporter.sendMail({
+    from: process.env.EMAIL_FROM,
+    to,
+    subject: 'Sign in to Viswork',
+    text: `Sign in link: ${url}`,
+    html: `<p>Click <a href="${url}">here</a> to sign in to Viswork. Link expires in 24 hours.</p>`,
+  })
+}
+
+export async function sendInvite({
+  to, inviteUrl, invitedBy, workspaceName,
+}: { to: string; inviteUrl: string; invitedBy: string; workspaceName: string }) {
+  await transporter.sendMail({
+    from: process.env.EMAIL_FROM,
+    to,
+    subject: `${invitedBy} invited you to ${workspaceName} on Viswork`,
+    text: `Accept your invite: ${inviteUrl}`,
+    html: `<p><strong>${invitedBy}</strong> invited you to join <strong>${workspaceName}</strong>.</p>
+           <p><a href="${inviteUrl}">Accept invite</a> — expires in 7 days.</p>`,
+  })
+}
+```
+
+**Local dev:** Use [Ethereal](https://ethereal.email) — free fake SMTP, previews emails in browser. Create account at ethereal.email, copy credentials.
+
+### Route Protection (`middleware.ts`)
+```typescript
+export { default } from 'next-auth/middleware'
+export const config = {
+  matcher: ['/stack/:path*', '/team/:path*', '/queries/:path*', '/missions/:path*', '/graveyard/:path*'],
+}
+```
+
+### Invite Flow
+1. POST `/api/invites` — auth required, creates `Invite` record with 7-day expiry, emails invite link
+2. GET `/invite/[token]` page — validates token (not expired, not used), sets a cookie with email, redirects to `/login`
+3. After magic link auth, if the User's email matches a pending Invite → mark invite as used → proceed to `/onboard/member`
+4. `/onboard/member` — creates TeamMember linked to session User
 
 ---
 
@@ -353,9 +492,85 @@ model MissionItem {
   position   Int               // order within the mission
   createdAt  DateTime @default(now())
 }
+
+// ---- Auth models (required by NextAuth.js v4 + @auth/prisma-adapter) ----
+
+model User {
+  id            String     @id @default(cuid())
+  name          String?
+  email         String     @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  member        TeamMember?   // one-to-one link; null until /onboard/member is completed
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---- Invites ----
+
+model Invite {
+  id          String     @id @default(cuid())
+  email       String
+  workspaceId String
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id])
+  token       String     @unique @default(cuid())
+  expiresAt   DateTime   // 7 days from creation
+  usedAt      DateTime?
+  invitedById String
+  invitedBy   TeamMember @relation("SentInvites", fields: [invitedById], references: [id])
+  createdAt   DateTime   @default(now())
+}
 ```
 
-Note: Add `missions Mission[] @relation("CreatedMissions")` and `missionItems MissionItem[]` to `TeamMember` and `Task` models respectively.
+**Also add to existing models:**
+
+`TeamMember`:
+```
+userId      String?    @unique
+user        User?      @relation(fields: [userId], references: [id])
+invitesSent Invite[]   @relation("SentInvites")
+```
+
+`Workspace`:
+```
+invites     Invite[]
+```
 
 ---
 
@@ -588,14 +803,28 @@ CREATE INDEX ON "Task" USING ivfflat ("taskVector" vector_cosine_ops);
 ## Environment Variables
 
 ```env
-# .env.local
-DATABASE_URL="postgresql://..."
-NEXTAUTH_SECRET="..."
+# .env (Prisma reads this — DATABASE_URL must be here)
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/viswork"
+
+# .env.local (Next.js reads this — all other vars)
 NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_SECRET="generate: openssl rand -base64 32"
+
+# SMTP — use Ethereal (https://ethereal.email) for local dev
+SMTP_HOST="smtp.ethereal.email"
+SMTP_PORT="587"
+SMTP_SECURE="false"
+SMTP_USER="your-ethereal-user@ethereal.email"
+SMTP_PASS="your-ethereal-password"
+EMAIL_FROM="Viswork <noreply@viswork.app>"
+
+# Supabase (for realtime — optional until Phase realtime)
 NEXT_PUBLIC_SUPABASE_URL="..."
 NEXT_PUBLIC_SUPABASE_ANON_KEY="..."
 SUPABASE_SERVICE_ROLE_KEY="..."
-OPENAI_API_KEY="..."    # for text-embedding-3-small
+
+# OpenAI (deferred to suggestion engine phase)
+OPENAI_API_KEY="..."
 ```
 
 ---
@@ -663,6 +892,8 @@ npx create-next-app@latest viswork --typescript --tailwind --app --src-dir=false
 # Add dependencies
 npm install prisma @prisma/client @supabase/supabase-js
 npm install next-auth @auth/prisma-adapter
+npm install nodemailer         # email sending
+npm install -D @types/nodemailer
 npm install framer-motion zustand @tanstack/react-query
 npm install canvas-confetti date-fns openai
 npm install -D @types/canvas-confetti

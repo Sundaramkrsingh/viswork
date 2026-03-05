@@ -29,6 +29,43 @@ Viswork solves all four visually and with minimal friction.
 
 ## MVP Scope
 
+### 0. Auth & Onboarding
+
+#### Login
+Magic link only — no passwords. Any email address receives a sign-in link.
+
+**Flow:**
+```
+/login → enter email → "Check your email" state
+       → user clicks link in email
+       → if has TeamMember → /stack
+       → if no TeamMember → /onboard/member (first-time setup)
+```
+
+#### Workspace Creation (first-ever user)
+The first user to sign in creates the workspace:
+```
+/login (first ever) → magic link → /onboard/workspace → name workspace
+                   → /onboard/member → set name + expertise
+                   → becomes first TeamMember + workspace is created
+```
+After this, the workspace slug is fixed. All subsequent members join this workspace.
+
+#### Inviting Members
+Any team member can invite others:
+- From the Team page: "Invite Member" button → enter email → send
+- Invited person receives an email with a unique invite link
+- They click it → pre-filled email on `/invite/[token]` → magic link sent → `/onboard/member`
+- Invites expire after 7 days
+
+#### Onboarding (`/onboard/member`)
+Required once per new member. Sets:
+- Display name
+- Expertise roles (at least one, ordered by proficiency)
+Once submitted, creates their TeamMember record and links it to their auth User.
+
+---
+
 ### 1. The Master Stack + Type Sub-Stacks
 
 #### Mental Model: One Queue, Multiple Lenses
@@ -323,7 +360,9 @@ At the end of a sprint/week, generate a visual "sprint card" — like a year-in-
 - Billing / invoicing
 - External stakeholder access
 - Roadmaps / milestones
-- Notifications via email/Slack (v2)
+- Push/Slack notifications (v2 — invite emails ARE in MVP)
 - Mobile app (v2)
 - Custom task types (v2)
 - AI-generated task descriptions (v2)
+- OAuth providers (Google/GitHub login) — magic link only in MVP
+- Multi-workspace support — one workspace per installation in MVP

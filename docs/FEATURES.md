@@ -1,5 +1,48 @@
 # Viswork — Feature Specifications
 
+## Auth & Onboarding Pages
+
+### Login Page (`/login`)
+- Centered card, dark background — no sidebar, full viewport
+- Viswork logo + tagline at top
+- Email input + "Send magic link" button
+- On submit: brief loading state → "Check your email" state (animated envelope icon)
+- If `?verify=1` in URL: show "Check your email" state immediately (NextAuth redirect after link sent)
+- Error state: invalid/expired link → friendly message + "Try again" button
+- No password field — ever
+
+### Workspace Onboarding (`/onboard/workspace`)
+Shown only to the very first user (no Workspace exists in DB).
+
+- Name your workspace (free text) — creates Workspace with auto-generated slug
+- Only rendered if `workspaceCount === 0`, otherwise redirect to `/onboard/member`
+- Immediately proceeds to member onboarding after submit
+
+### Member Onboarding (`/onboard/member`)
+Shown to any authenticated user without a linked TeamMember.
+
+- **Name field** — required
+- **Expertise roles** — ordered list of free-text tags (first = primary skill)
+  - Visual: add tags via text input + Enter; chips show in order
+  - First chip highlighted in its derived hue color (preview of avatar ring color)
+- Submit → creates TeamMember linked to session User → redirect to `/stack`
+
+### Invite Accept Page (`/invite/[token]`)
+- Validates token (exists, not expired, not used)
+- Invalid/expired: friendly error + "Ask for a new invite" message
+- Valid: shows workspace name + "You've been invited" message
+- "Accept & Sign In" → triggers NextAuth magic link to invite email address → marks invite as used
+- After auth, redirects to `/onboard/member`
+
+### Invite Member (Team page modal)
+- "Invite Member" button in Team page header
+- Small modal: email input + "Send Invite"
+- POST `/api/invites` — creates Invite (7-day expiry), sends email with `sendInvite()`
+- Already-a-member guard: returns 409 if email has existing TeamMember
+- Success: toast "Invite sent to [email]"
+
+---
+
 ## Task Types & Colors
 
 | Type      | Color        | Hex       | Description                          |
