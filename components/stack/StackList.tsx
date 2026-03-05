@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Layers } from 'lucide-react'
 import { TaskCard } from '@/components/task-card/TaskCard'
 import { StackFilterTabs } from './StackFilterTabs'
+import { TaskSlideOver } from '@/components/task-card/TaskSlideOver'
 import type { TaskWithRank, TaskType } from '@/lib/types'
 
 async function fetchStack(): Promise<TaskWithRank[]> {
@@ -16,6 +17,7 @@ async function fetchStack(): Promise<TaskWithRank[]> {
 
 export function StackList() {
   const [activeFilter, setActiveFilter] = useState<TaskType | 'all'>('all')
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
 
   const { data: tasks = [], isLoading, isError } = useQuery({
     queryKey: ['stack'],
@@ -40,6 +42,8 @@ export function StackList() {
   }
 
   return (
+    <>
+    <TaskSlideOver taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
     <div className="flex flex-col gap-4">
       {/* Filter tabs */}
       <StackFilterTabs
@@ -69,13 +73,14 @@ export function StackList() {
                 layout
                 exit={{ opacity: 0, scale: 0.96, y: -8, transition: { duration: 0.2 } }}
               >
-                <TaskCard task={task} index={i} />
+                <TaskCard task={task} index={i} onClick={() => setSelectedTaskId(task.id)} />
               </motion.div>
             ))}
           </AnimatePresence>
         </div>
       )}
     </div>
+    </>
   )
 }
 
