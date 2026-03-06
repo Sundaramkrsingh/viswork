@@ -141,6 +141,23 @@ export async function updateTaskStatus(id: string, status: Task['status']): Prom
   return toClientTask(updated)
 }
 
+export type CancelledTask = Task & {
+  assignee?: TeamMember
+}
+
+export async function getCancelledTasks(workspaceId: string): Promise<CancelledTask[]> {
+  const tasks = await prisma.task.findMany({
+    where: { workspaceId, status: 'cancelled' },
+    include: { assignee: true },
+    orderBy: { cancelledAt: 'desc' },
+  })
+
+  return tasks.map((task) => ({
+    ...toClientTask(task),
+    assignee: task.assignee ? toClientMember(task.assignee) : undefined,
+  }))
+}
+
 export async function getTeamMembers(workspaceId: string): Promise<TeamMember[]> {
   const members = await prisma.teamMember.findMany({
     where: { workspaceId },
