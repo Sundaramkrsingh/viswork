@@ -1,16 +1,18 @@
 'use client'
 
+import { useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useSession, signOut } from 'next-auth/react'
 import {
   Layers,
   Users,
   MessageSquare,
   Target,
   Archive,
-  User,
+  LogOut,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, expertiseToColor } from '@/lib/utils'
 
 const NAV_ITEMS = [
   {
@@ -47,6 +49,29 @@ const NAV_ITEMS = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const { data: session, status } = useSession()
+
+  // Client-side watchdog: sign out whenever the session is clearly invalid.
+  // This covers: expired JWT, user deleted (RefreshAccessTokenError from the jwt callback),
+  // and any other case where the session ends up without a user id.
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      signOut({ callbackUrl: '/login' })
+      return
+    }
+    if (status === 'authenticated' && (!session?.user?.id || session?.error === 'RefreshAccessTokenError')) {
+      signOut({ callbackUrl: '/login' })
+    }
+  }, [status, session])
+
+  const userName = session?.user?.name ?? session?.user?.email ?? 'You'
+  const userImage = session?.user?.image
+  const userInitials = userName
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -96,12 +121,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         {/* User area */}
-        <div className="border-t border-border p-3">
-          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-all duration-150">
-            <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
-              <User className="w-3.5 h-3.5" />
+        <div className="border-t border-border p-3 flex flex-col gap-1">
+          <div className="flex items-center gap-2.5 px-3 py-2">
+            <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0 text-[11px] font-semibold overflow-hidden">
+              {userImage ? (
+                <img src={userImage} alt={userName} className="w-full h-full object-cover" />
+              ) : (
+                userInitials
+              )}
             </div>
-            <span className="font-medium truncate">You</span>
+            <span className="text-sm font-medium text-foreground truncate flex-1">{userName}</span>
+          </div>
+          <button
+            onClick={() => signOut({ callbackUrl: '/login' })}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-red-400 hover:bg-red-500/8 transition-all duration-150"
+          >
+            <LogOut className="w-3.5 h-3.5 shrink-0" />
+            <span>Sign out</span>
           </button>
         </div>
       </aside>

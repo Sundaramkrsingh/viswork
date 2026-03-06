@@ -11,6 +11,9 @@ declare module 'next-auth' {
       memberId?: string       // TeamMember.id — undefined until /onboard/member completed
       workspaceId?: string    // Workspace.id
     }
+    /** Set when the access token refresh fails (e.g. user deleted).
+     *  Client should call signOut() when this is present. */
+    error?: 'RefreshAccessTokenError'
   }
 }
 
@@ -19,5 +22,9 @@ declare module 'next-auth/jwt' {
     userId?: string
     memberId?: string
     workspaceId?: string
+    /** Unix ms — expiry of the current access token window (1 week from last refresh) */
+    accessTokenExpires?: number
+    /** Set when refreshAccessToken() fails — propagated to Session.error */
+    error?: 'RefreshAccessTokenError'
   }
 }

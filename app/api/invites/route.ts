@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/config'
 import { prisma } from '@/lib/db/prisma'
 import { sendInvite } from '@/lib/email'
+import { APP_URL } from '@/lib/config'
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
@@ -57,7 +58,7 @@ export async function POST(req: Request) {
       select: { name: true },
     })
 
-    const inviteUrl = `${process.env.NEXTAUTH_URL}/invite/${invite.token}`
+    const inviteUrl = `${APP_URL}/invite/${invite.token}`
 
     await sendInvite({
       to: normalizedEmail,

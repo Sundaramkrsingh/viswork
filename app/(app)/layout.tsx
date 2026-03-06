@@ -6,7 +6,8 @@ import { AppShell } from '@/components/layout/AppShell'
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions)
 
-  if (!session) redirect('/login')
+  // No session OR session was invalidated (user deleted — id is cleared to '')
+  if (!session || !session.user.id) redirect('/login')
 
   // Authenticated but hasn't completed onboarding yet
   if (!session.user.memberId) redirect('/onboard/workspace')
