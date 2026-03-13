@@ -18,7 +18,7 @@ The core philosophy: **no boring UI, everything communicates state visually**.
 - **Styling**: Tailwind CSS + Framer Motion (heavy animation use)
 - **UI primitives**: shadcn/ui (as base only, heavily customized visually)
 - **Database**: PostgreSQL via Prisma ORM
-- **Realtime**: Supabase Realtime (or Socket.io fallback)
+- **Realtime**: Server-Sent Events (SSE) via `/api/events` — no external service
 - **Auth**: NextAuth.js (credentials + magic link)
 - **State**: Zustand + React Query (TanStack Query v5)
 
@@ -42,7 +42,8 @@ See `docs/TECH.md` for full schema and architecture.
   /ui              — Base shadcn components
 /lib
   /db              — Prisma client
-  /realtime        — Supabase/socket setup
+  /sse             — SSE broadcaster + client hook
+  /ai              — Gemini embeddings + suggestion engine
   /utils
 /prisma
   schema.prisma

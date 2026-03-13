@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { addMissionItem } from '@/lib/db/mission'
+import { getOrCreateDefaultWorkspace } from '@/lib/db/stack'
+import { broadcast } from '@/lib/sse/broadcaster'
 
 export async function POST(
   req: Request,
@@ -17,6 +19,9 @@ export async function POST(
       taskId: body.taskId,
       targetText: body.targetText,
     })
+    const workspace = await getOrCreateDefaultWorkspace()
+    broadcast(workspace.id, 'missions')
+
     return NextResponse.json(item, { status: 201 })
   } catch (error) {
     console.error('[POST /api/missions/[id]/items]', error)

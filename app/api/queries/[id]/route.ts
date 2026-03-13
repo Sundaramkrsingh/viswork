@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { resolveQuery } from '@/lib/db/query'
+import { getOrCreateDefaultWorkspace } from '@/lib/db/stack'
+import { broadcast } from '@/lib/sse/broadcaster'
 
 export async function PATCH(
   _req: Request,
@@ -8,6 +10,10 @@ export async function PATCH(
   try {
     const { id } = await params
     const query = await resolveQuery(id)
+
+    const workspace = await getOrCreateDefaultWorkspace()
+    broadcast(workspace.id, 'queries')
+
     return NextResponse.json(query)
   } catch (error) {
     console.error('[/api/queries/[id]]', error)

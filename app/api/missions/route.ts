@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/config'
 import { getOrCreateDefaultWorkspace } from '@/lib/db/stack'
 import { getMissions, createMission } from '@/lib/db/mission'
+import { broadcast } from '@/lib/sse/broadcaster'
 import type { MissionVisibility } from '@/lib/types'
 
 export async function GET() {
@@ -44,6 +45,7 @@ export async function POST(req: Request) {
       creatorId: session.user.memberId,
     })
 
+    broadcast(workspace.id, 'missions')
     return NextResponse.json(mission, { status: 201 })
   } catch (error) {
     console.error('[POST /api/missions]', error)

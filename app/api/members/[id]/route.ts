@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { updateMemberAvailability } from '@/lib/db/member'
+import { getOrCreateDefaultWorkspace } from '@/lib/db/stack'
+import { broadcast } from '@/lib/sse/broadcaster'
 import type { AvailabilityStatus } from '@/lib/types'
 
 export async function PATCH(
@@ -17,6 +19,9 @@ export async function PATCH(
       availability: body.availability,
       flowStateEndsAt: body.flowStateEndsAt ? new Date(body.flowStateEndsAt) : null,
     })
+
+    const workspace = await getOrCreateDefaultWorkspace()
+    broadcast(workspace.id, 'team')
 
     return NextResponse.json(member)
   } catch (error) {

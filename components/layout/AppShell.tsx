@@ -13,6 +13,7 @@ import {
   LogOut,
 } from 'lucide-react'
 import { cn, expertiseToColor } from '@/lib/utils'
+import { useSSE } from '@/hooks/useSSE'
 
 const NAV_ITEMS = [
   {
@@ -50,6 +51,7 @@ const NAV_ITEMS = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const { data: session, status } = useSession()
+  useSSE()
 
   // Client-side watchdog: sign out whenever the session is clearly invalid.
   // This covers: expired JWT, user deleted (RefreshAccessTokenError from the jwt callback),

@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getTask, assignTask, updateTaskStatus } from '@/lib/db/task'
+import { getOrCreateDefaultWorkspace } from '@/lib/db/stack'
+import { broadcast } from '@/lib/sse/broadcaster'
 import type { Task } from '@/lib/types'
 
 export async function GET(
@@ -33,6 +35,11 @@ export async function PATCH(
     } else {
       return NextResponse.json({ error: 'Provide assigneeId or status' }, { status: 400 })
     }
+
+    const workspace = await getOrCreateDefaultWorkspace()
+    broadcast(workspace.id, 'stack')
+    broadcast(workspace.id, 'team')
+    if (task.status === 'cancelled') broadcast(workspace.id, 'graveyard')
 
     return NextResponse.json(task)
   } catch (error) {
